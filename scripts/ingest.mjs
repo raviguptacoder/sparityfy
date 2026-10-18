@@ -15,7 +15,7 @@ const IGNORED = new Set(["node_modules", "scripts"]);
 const CATEGORY_PATTERN = /^[a-z0-9_-]{1,32}$/;
 const FILE_PATTERN = /^(\d+)\.gif$/i;
 
-const MAX_REPO_BYTES = Number(process.env.MAX_REPO_MB ?? 800) * 1024 * 1024;
+const MAX_REPO_BYTES = Number(process.env.MAX_REPO_MB ?? 3000) * 1024 * 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 20_000;
 const NEKOS_BATCH = 10;
