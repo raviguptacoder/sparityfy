@@ -49,4 +49,10 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "manifest: update"
           fi
-          git push
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            git pull --rebase origin "${{ github.ref_name }}"
+          done
+          exit 1
