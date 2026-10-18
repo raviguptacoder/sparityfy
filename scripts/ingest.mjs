@@ -22,16 +22,19 @@ const NEKOS_BATCH = 10;
 const NEKOS_ROUNDS = Number(process.env.NEKOS_ROUNDS ?? 3);
 const WAIFU_ROUNDS = Number(process.env.WAIFU_ROUNDS ?? 8);
 const PURRBOT_ROUNDS = Number(process.env.PURRBOT_ROUNDS ?? 20);
+const NEKOSLIFE_ROUNDS = Number(process.env.NEKOSLIFE_ROUNDS ?? 10);
 const USAGE_RATIO = Number(process.env.USAGE_RATIO ?? 0.5);
 const LIMIT_PER_MIN = {
 	nekos: Number(process.env.NEKOS_LIMIT_PER_MIN ?? 100),
 	waifu: Number(process.env.WAIFU_LIMIT_PER_MIN ?? 60),
 	purrbot: Number(process.env.PURRBOT_LIMIT_PER_MIN ?? 30),
+	nekoslife: Number(process.env.NEKOSLIFE_LIMIT_PER_MIN ?? 30),
 };
 const GAP_MS = {
 	nekos: Math.ceil(60_000 / (LIMIT_PER_MIN.nekos * USAGE_RATIO)),
 	waifu: Math.ceil(60_000 / (LIMIT_PER_MIN.waifu * USAGE_RATIO)),
 	purrbot: Math.ceil(60_000 / (LIMIT_PER_MIN.purrbot * USAGE_RATIO)),
+	nekoslife: Math.ceil(60_000 / (LIMIT_PER_MIN.nekoslife * USAGE_RATIO)),
 };
 const deadline = Date.now() + Number(process.env.RUN_BUDGET_MIN ?? 50) * 60_000;
 const outOfTime = () => Date.now() >= deadline;
@@ -49,6 +52,13 @@ const PURRBOT_NSFW_CATEGORIES = [
 	"anal", "blowjob", "cum", "fuck", "neko", "pussylick", "solo",
 	"threesome_fff", "threesome_ffm", "threesome_mmf", "yaoi", "yuri",
 ].map((name) => `nsfw_${name}`);
+const NEKOSLIFE_NSFW_KNOWN = [
+	"anal", "bj", "blowjob", "boobs", "classic", "cum", "ero", "erofeet", "erok", "erokemo",
+	"eron", "eroyuri", "feet", "feetg", "femdom", "futanari", "hentai", "holoero", "hololewd",
+	"kuni", "les", "lewd", "lewdk", "lewdkemo", "nsfw_avatar", "nsfw_neko_gif", "pussy",
+	"pussy_jpg", "random_hentai_gif", "solo", "solog", "spank", "tits", "trap", "yuri",
+];
+const nekoslifeNames = new Map();
 const WAIFU_NSFW_CATEGORIES = ["waifu", "neko", "trap", "blowjob"].map((name) => `nsfw_${name}`);
 
 const only = new Set(
@@ -141,7 +151,7 @@ function allocateFile(category) {
 	return `${category}/${index}.gif`;
 }
 
-const lastCall = { nekos: 0, waifu: 0, purrbot: 0 };
+const lastCall = { nekos: 0, waifu: 0, purrbot: 0, nekoslife: 0 };
 
 async function request(provider, url, { json }) {
 	const wait = lastCall[provider] + GAP_MS[provider] - Date.now();
@@ -167,6 +177,13 @@ async function fetchBatch(provider, category) {
 		return (body.results ?? [])
 			.filter((entry) => typeof entry.url === "string")
 			.map((entry) => ({ url: entry.url, anime: entry.anime_name ?? null }));
+	}
+
+	if (provider === "nekoslife") {
+		const name = nekoslifeNames.get(category) ?? category.slice(5);
+		const response = await request("nekoslife", `https://nekos.life/api/v2/img/${name}`, { json: true });
+		const body = await response.json();
+		return typeof body.url === "string" ? [{ url: body.url, anime: null }] : [];
 	}
 
 	if (provider === "purrbot") {
@@ -276,9 +293,33 @@ async function discoverNekos() {
 	}
 }
 
+async function discoverNekoslife() {
+	const known = new Set(NEKOSLIFE_NSFW_KNOWN);
+	let names = NEKOSLIFE_NSFW_KNOWN;
+	try {
+		const response = await request("nekoslife", "https://nekos.life/api/v2/endpoints", { json: true });
+		const text = JSON.stringify(await response.json());
+		const start = text.indexOf("/api/v2/img/<");
+		if (start >= 0) {
+			const end = text.indexOf(">", start);
+			const found = (text.slice(start + 13, end).match(/[A-Za-z0-9_]+/g) ?? []).filter((name) => known.has(name.toLowerCase()));
+			if (found.length > 0) names = found;
+		}
+	} catch (error) {
+		if (error instanceof ProviderBlocked) blocked.add("nekoslife");
+		console.warn(`nekoslife category discovery failed: ${error.message}`);
+	}
+	return names.map((name) => {
+		const folder = `nsfw_${name.toLowerCase()}`;
+		nekoslifeNames.set(folder, name);
+		return folder;
+	});
+}
+
 const wanted = (category) => only.size === 0 || only.has(category);
 
 const nekosCategories = await discoverNekos();
+const nekoslifeCategories = await discoverNekoslife();
 
 async function runProvider(provider, categories, rounds) {
 	for (const category of shuffle(categories.filter(wanted))) await ingest(provider, category, rounds);
@@ -288,6 +329,7 @@ await Promise.all([
 	runProvider("nekos", nekosCategories, NEKOS_ROUNDS),
 	runProvider("waifu", [...WAIFU_CATEGORIES, ...WAIFU_NSFW_CATEGORIES], WAIFU_ROUNDS),
 	runProvider("purrbot", PURRBOT_NSFW_CATEGORIES, PURRBOT_ROUNDS),
+	runProvider("nekoslife", nekoslifeCategories, NEKOSLIFE_ROUNDS),
 ]);
 
 saveState(state);
