@@ -1,3 +1,4 @@
+
 import { createHash } from "node:crypto";
 import {
 	existsSync,
@@ -10,7 +11,7 @@ import {
 import { join } from "node:path";
 
 const STATE_FILE = "ingest-state.json";
-const USER_AGENT = "Zorgify-Ingest/1.0 (+https://github.com/raviguptacoder/sparityfy)";
+const USER_AGENT = "Zorgify-Ingest/1.0";
 const IGNORED = new Set(["node_modules", "scripts"]);
 const CATEGORY_PATTERN = /^[a-z0-9_-]{1,32}$/;
 const FILE_PATTERN = /^(\d+)\.gif$/i;
